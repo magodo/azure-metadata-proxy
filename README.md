@@ -8,7 +8,7 @@ The main reason is to allow users to change the `resourceManager` endpoint in th
 
 ## Install
 
-`go install github.com/magodo/azure-metadata-host@main`
+`go install github.com/magodo/azure-metadata-proxy@main`
 
 ## Precondition
 
