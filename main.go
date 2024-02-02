@@ -25,6 +25,18 @@ var (
 	flagOriginHost = flag.String("origin", "https://management.azure.com", "The origin hostname of the metadata endpoint that is proxied to")
 )
 
+type BufWriteCloser struct {
+	buf *bytes.Buffer
+}
+
+func (b BufWriteCloser) Write(p []byte) (n int, err error) {
+	return b.buf.Write(p)
+}
+
+func (b BufWriteCloser) Close() error {
+	return nil
+}
+
 func main() {
 	flag.Parse()
 
@@ -51,9 +63,20 @@ func main() {
 				return nil
 			}
 
-			reader, err := gzip.NewReader(r.Body)
-			if err != nil {
-				return fmt.Errorf("new gzip reader: %v", err)
+			var (
+				buf    bytes.Buffer
+				reader io.ReadCloser
+				writer io.WriteCloser
+			)
+			switch r.Header.Get("Content-Encoding") {
+			case "gzip":
+				reader, err = gzip.NewReader(r.Body)
+				defer reader.Close()
+				writer = gzip.NewWriter(&buf)
+				defer writer.Close()
+			default:
+				reader = r.Body
+				writer = BufWriteCloser{buf: &buf}
 			}
 
 			b, err := io.ReadAll(reader)
@@ -70,13 +93,8 @@ func main() {
 				return fmt.Errorf("patching the respnse: %v", err)
 			}
 
-			var buf bytes.Buffer
-			writer := gzip.NewWriter(&buf)
 			if _, err := writer.Write(b); err != nil {
 				return fmt.Errorf("writing the patched response: %v", err)
-			}
-			if err := writer.Close(); err != nil {
-				return fmt.Errorf("close after writing the patched response: %v", err)
 			}
 			r.Header.Set("Content-Length", strconv.Itoa(len(buf.Bytes())))
 			r.Body = io.NopCloser(&buf)
